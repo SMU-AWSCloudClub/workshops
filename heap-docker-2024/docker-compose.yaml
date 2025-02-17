@@ -1,0 +1,74 @@
+networks:
+  app_network:
+    driver: bridge
+
+services:
+
+  #! NGINX Service (in reverse proxy mode)
+  # ? Why do we need a reverse proxy here?
+  # If you look in nginx.conf, we actually redirect all our /api/ urls into our backend docker container.
+
+  nginx:
+    image: nginx:latest
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - app_network
+    restart: unless-stopped
+
+  #! BACKEND Service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    expose: # Makes 8080 known to other services within the same docker app_network
+      - "8080"
+    networks:
+      - app_network
+    depends_on:
+      - db
+    environment:
+      - DB_HOST=db
+      - DB_USER=root
+      - DB_PASSWORD=
+      - DB_NAME=booklibrary
+    restart: unless-stopped
+
+  #! FRONTEND Service
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_BACKEND_URL=${NEXT_PUBLIC_BACKEND_URL}
+    expose: # Makes 3000 known to other services within the same docker app_network
+      - "3000"
+    networks:
+      - app_network
+    environment:
+        - NEXT_PUBLIC_BACKEND_URL=${NEXT_PUBLIC_BACKEND_URL}
+    restart: unless-stopped
+
+  #! Database service
+  # ? MariaDB is a fork of MySQL
+  db:
+    image: mariadb:latest
+    environment:
+      MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 'yes'
+      MARIADB_DATABASE: booklibrary
+    expose: # Makes 3306 known to other services within the same docker app_network
+      - "3306"
+    networks:
+      - app_network
+    volumes:
+      - db_data:/var/lib/mysql
+    restart: unless-stopped
+
+volumes:
+  db_data:
